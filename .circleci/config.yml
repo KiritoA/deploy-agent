@@ -20,7 +20,7 @@ jobs:
       - save_cache:
           key: go-mod-v4-{{ checksum "go.sum" }}
           paths:
-            - "/go/pkg/mod"
+            - "/home/circleci/go/pkg/mod"
 
       - store_artifacts: # upload test summary for display in Artifacts
           path: ./build
