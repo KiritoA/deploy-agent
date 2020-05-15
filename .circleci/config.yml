@@ -23,7 +23,7 @@ jobs:
             - "/go/pkg/mod"
 
       - store_artifacts: # upload test summary for display in Artifacts
-          path: /build
+          path: ./build
 
 workflows:
   version: 2
