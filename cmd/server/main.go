@@ -81,7 +81,7 @@ func getDeployCommandParams(config Config) (params CommandParams) {
 		break
 	case ModeStack:
 		params.Name = "docker"
-		params.Args = []string{"stack", "deploy", "-c", "-", "--with-registry-auth", config.projectName}
+		params.Args = []string{"stack", "deploy", "-c", "-", "--with-registry-auth", "--resolve-image", "changed", config.projectName}
 	}
 	return
 }
