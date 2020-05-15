@@ -96,31 +96,27 @@ func loadConfig() {
 	token := flag.String("token", "", "Authorization token")
 	flag.Parse()
 
-	config.Address = *address
-
 	if *composePath == "" {
 		log.Fatal("Missing option [compose-file]")
 	}
-	config.ComposePath = *composePath
 
 	if *workingDir != "" {
 		if _, err := os.Stat(*workingDir); os.IsNotExist(err) {
 			log.Fatalf("Working directory [%v] doesn't exists", *workingDir)
 		}
-		config.WorkingDir = *workingDir
 	}
 
 	if *registry == "" {
 		log.Fatalf("Registry url must not be empty")
 	}
-	config.Registry = *registry
 
 	if *mode != ModeCompose && *mode != ModeStack {
 		log.Fatalf("Invalid mode [%v]", mode)
 	}
-	config.Mode = *mode
 
-	config.projectName = *projectName
+	if *mode == ModeStack && *projectName == "" {
+		log.Fatalf("Project [%v]", mode)
+	}
 
 	if *token == "" {
 		log.Fatalf("Missing token argument")
@@ -129,7 +125,16 @@ func loadConfig() {
 	if len(*token) < 16 {
 		log.Fatalf("Token must be at least 16 bytes")
 	}
-	config.Token = *token
+
+	config = Config{
+		Address:     *address,
+		ComposePath: *composePath,
+		WorkingDir:  *workingDir,
+		Registry:    *registry,
+		Mode:        *mode,
+		projectName: *projectName,
+		Token:       *token,
+	}
 }
 
 func main() {
