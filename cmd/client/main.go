@@ -46,8 +46,8 @@ func main() {
 	}
 
 	authConfig := types.AuthConfig{
-		Username:      *username,
-		Password:      *password,
+		Username: *username,
+		Password: *password,
 	}
 
 	encodedAuthConfig := ""
@@ -81,4 +81,8 @@ func main() {
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	fmt.Print(string(body))
+
+	if resp.StatusCode >= 400 {
+		os.Exit(1)
+	}
 }
