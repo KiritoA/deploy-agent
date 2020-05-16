@@ -24,7 +24,6 @@ func main() {
 	service := flag.String("service", "", "Service name")
 	image := flag.String("image", "", "Image name")
 	tag := flag.String("tag", "", "Image tag")
-	registry := flag.String("registry", "", "Registry url")
 	username := flag.String("username", "", "Username")
 	password := flag.String("password", "", "password")
 	token := flag.String("token", "", "Token")
@@ -47,7 +46,6 @@ func main() {
 	}
 
 	authConfig := types.AuthConfig{
-		ServerAddress: *registry,
 		Username:      *username,
 		Password:      *password,
 	}
