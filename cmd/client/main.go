@@ -1,8 +1,11 @@
 package main
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/docker/docker/api/types"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -19,10 +22,12 @@ func exitWithMessage(message string) {
 func main() {
 	_url := flag.String("url", "", "Endpoint url")
 	service := flag.String("service", "", "Service name")
-	token := flag.String("token", "", "Token")
-	registryAuth := flag.String("registry-auth", "", "A base64-encoded auth configuration for pulling from private registries.")
 	image := flag.String("image", "", "Image name")
 	tag := flag.String("tag", "", "Image tag")
+	registry := flag.String("registry", "", "Registry url")
+	username := flag.String("username", "", "Username")
+	password := flag.String("password", "", "password")
+	token := flag.String("token", "", "Token")
 	flag.Parse()
 
 	if *_url == "" {
@@ -41,6 +46,18 @@ func main() {
 		exitWithMessage("Token required")
 	}
 
+	authConfig := types.AuthConfig{
+		ServerAddress: *registry,
+		Username:      *username,
+		Password:      *password,
+	}
+
+	encodedAuthConfig := ""
+	if (types.AuthConfig{} != authConfig) {
+		authBytes, _ := json.Marshal(authConfig)
+		encodedAuthConfig = base64.URLEncoding.EncodeToString(authBytes)
+	}
+
 	client := &http.Client{}
 
 	req, err := http.NewRequest("POST",
@@ -55,7 +72,7 @@ func main() {
 	}
 
 	req.Header.Add("Authorization", "Bearer "+*token)
-	req.Header.Add("X-Registry-Auth", *registryAuth)
+	req.Header.Add("X-Registry-Auth", encodedAuthConfig)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	resp, err := client.Do(req)
