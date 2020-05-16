@@ -88,6 +88,7 @@ func isAuthorized(request *http.Request) bool {
 func update(writer http.ResponseWriter, request *http.Request) {
 	if !isAuthorized(request) {
 		writer.WriteHeader(http.StatusUnauthorized)
+		writer.Write([]byte("Unauthorized"))
 		return
 	}
 
