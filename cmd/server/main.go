@@ -1,13 +1,10 @@
 package main
 
 import (
-	"bytes"
 	"crypto/subtle"
 	"flag"
 	"fmt"
 	log "github.com/sirupsen/logrus"
-	"gopkg.in/yaml.v2"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"os/exec"
@@ -16,23 +13,11 @@ import (
 
 type Config struct {
 	Address     string
-	ComposePath string
-	WorkingDir  string
 	Registry    string
-	Mode        string
 	Token       string
-	projectName string
-}
-
-type CommandParams struct {
-	Name string
-	Args []string
 }
 
 var config = Config{}
-
-const ModeCompose = "compose"
-const ModeStack = "stack"
 
 var tokenRegex = regexp.MustCompile(`Bearer\s([a-zA-z0-9]+)`)
 
@@ -45,77 +30,14 @@ func init() {
 	log.SetLevel(log.DebugLevel)
 }
 
-func getTestCommandParams(config Config) (params CommandParams) {
-	switch config.Mode {
-	case ModeCompose:
-		params.Name = "docker-compose"
-		params.Args = []string{"-f", config.ComposePath}
-
-		if config.projectName != "" {
-			params.Args = append(params.Args, "-p")
-			params.Args = append(params.Args, config.projectName)
-		}
-
-		params.Args = append(params.Args, "ps")
-		break
-	case ModeStack:
-		params.Name = "docker"
-		params.Args = []string{"stack", "ps", config.projectName}
-	}
-	return
-}
-
-func getDeployCommandParams(config Config) (params CommandParams) {
-	switch config.Mode {
-	case ModeCompose:
-		params.Name = "docker-compose"
-		params.Args = []string{"-f", "-"}
-
-		if config.projectName != "" {
-			params.Args = append(params.Args, "-p")
-			params.Args = append(params.Args, config.projectName)
-		}
-
-		params.Args = append(params.Args, "up")
-		params.Args = append(params.Args, "-d")
-		break
-	case ModeStack:
-		params.Name = "docker"
-		params.Args = []string{"stack", "deploy", "-c", "-", "--with-registry-auth", "--resolve-image", "changed", config.projectName}
-	}
-	return
-}
-
 func loadConfig() {
 	address := flag.String("address", ":8090", "Server listen address")
-	composePath := flag.String("compose-file", "", "Path to a Compose file")
-	workingDir := flag.String("working-dir", "", "Working directory")
-	registry := flag.String("registry", "", "Registry url")
-	mode := flag.String("mode", "compose", "Either `compose` or `stack`")
-	projectName := flag.String("project", "", "Project name (compose) or stack name (Swarm)")
+	registry := flag.String("registry", "", "Trusted registry")
 	token := flag.String("token", "", "Authorization token")
 	flag.Parse()
 
-	if *composePath == "" {
-		log.Fatal("Missing option [compose-file]")
-	}
-
-	if *workingDir != "" {
-		if _, err := os.Stat(*workingDir); os.IsNotExist(err) {
-			log.Fatalf("Working directory [%v] doesn't exists", *workingDir)
-		}
-	}
-
 	if *registry == "" {
 		log.Fatalf("Registry url must not be empty")
-	}
-
-	if *mode != ModeCompose && *mode != ModeStack {
-		log.Fatalf("Invalid mode [%v]", mode)
-	}
-
-	if *mode == ModeStack && *projectName == "" {
-		log.Fatalf("Project [%v]", mode)
 	}
 
 	if *token == "" {
@@ -128,11 +50,7 @@ func loadConfig() {
 
 	config = Config{
 		Address:     *address,
-		ComposePath: *composePath,
-		WorkingDir:  *workingDir,
 		Registry:    *registry,
-		Mode:        *mode,
-		projectName: *projectName,
 		Token:       *token,
 	}
 }
@@ -142,20 +60,8 @@ func main() {
 
 	log.Println("Starting deploy agent")
 
-	log.Debug("Running compose file test")
-
-	params := getTestCommandParams(config)
-	cmd := exec.Command(params.Name, params.Args...)
-	cmd.Dir = config.WorkingDir
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		log.Fatalf("Docker command test failed: \n%v\n%v", string(out), err)
-	}
-
-	log.Debug("Compose file test passed")
-
 	http.HandleFunc("/update", update)
-	err = http.ListenAndServe(config.Address, nil)
+	err := http.ListenAndServe(config.Address, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -191,80 +97,16 @@ func update(writer http.ResponseWriter, request *http.Request) {
 
 	tag := request.FormValue("tag")
 
-	data, err := ioutil.ReadFile(config.ComposePath)
-
-	// Parse compose file
-	var composeConfigMap map[string]interface{}
-	err = yaml.Unmarshal([]byte(data), &composeConfigMap)
-	if err != nil {
-		errStr := fmt.Sprintf("error: %v", err)
-		log.Error(errStr)
-		writer.WriteHeader(http.StatusInternalServerError)
-		_, _ = writer.Write([]byte(errStr))
-		return
-	}
-
-	_services, ok := composeConfigMap["services"]
-	if !ok {
-		errStr := "No services field found in compose file"
-		log.Error(errStr)
-		writer.WriteHeader(http.StatusBadRequest)
-		_, _ = writer.Write([]byte(errStr))
-		return
-	}
-
-	services := _services.(map[interface{}]interface{})
-	if !ok {
-		errStr := "Invalid services structure"
-		log.Error(errStr)
-		writer.WriteHeader(http.StatusBadRequest)
-		_, _ = writer.Write([]byte(errStr))
-		return
-	}
-
 	imageName := config.Registry + "/" + image
 	if tag != "" {
 		imageName += ":" + tag
 	}
 
-	found := false
-	for serviceFieldName, value := range services {
-		if serviceFieldName == serviceName {
-			serviceItem, ok := value.(map[interface{}]interface{})
-			if !ok {
-				errStr := "Invalid service item structure"
-				log.Error(errStr)
-				writer.WriteHeader(http.StatusBadRequest)
-				_, _ = writer.Write([]byte(errStr))
-				return
-			}
-
-			serviceItem["image"] = imageName
-			found = true
-			break
-		}
-	}
-
-	if !found {
-		writer.WriteHeader(http.StatusBadRequest)
-		_, _ = writer.Write([]byte(fmt.Sprintf("Invalid service [%s]", serviceName)))
-		return
-	}
-
-	yamlBytes, err := yaml.Marshal(composeConfigMap)
-	if err != nil {
-		errStr := fmt.Sprintf("Yaml marshal failed: %v", err)
-		log.Error(errStr)
-		writer.WriteHeader(http.StatusInternalServerError)
-		_, _ = writer.Write([]byte(errStr))
-
-		return
-	}
-
-	params := getDeployCommandParams(config)
-	cmd := exec.Command(params.Name, params.Args...)
-	cmd.Stdin = bytes.NewReader(yamlBytes)
-	cmd.Dir = config.WorkingDir
+	// docker service update --image [Service image tag] --with-registry-auth [Service name]
+	cmd := exec.Command("docker", "service", "update",
+		"--image", imageName,
+		"--with-registry-auth",
+		serviceName)
 	out, err := cmd.CombinedOutput()
 	outputStr := string(out)
 	if err != nil {
