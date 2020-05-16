@@ -25,6 +25,23 @@ jobs:
       - store_artifacts: # upload test summary for display in Artifacts
           path: ./build
 
+      - setup_remote_docker
+
+      - run: |
+          TAG=build-$CIRCLE_BUILD_NUM
+
+          echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+
+          docker build -f client.Dockerfile -t $DOCKER_USER/deploy-agent-client:$TAG .
+          docker tag $DOCKER_USER/deploy-agent-client:$TAG $DOCKER_USER/deploy-agent-client:latest
+          docker push $DOCKER_USER/deploy-agent-client:$TAG
+          docker push $DOCKER_USER/deploy-agent-client:latest
+
+          docker build -f server.Dockerfile -t $DOCKER_USER/deploy-agent-server:$TAG .
+          docker tag $DOCKER_USER/deploy-agent-server:$TAG $DOCKER_USER/deploy-agent-server:latest
+          docker push $DOCKER_USER/deploy-agent-server:$TAG
+          docker push $DOCKER_USER/deploy-agent-server:latest
+
 workflows:
   version: 2
   build-workflow:
