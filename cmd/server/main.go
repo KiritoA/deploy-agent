@@ -63,10 +63,15 @@ func main() {
 		Token:    *token,
 	}
 
+	_, err := dockerClient.SwarmInspect(context.Background())
+	if err != nil {
+		log.Fatal("Failed to connect to docker: ", err)
+	}
+
 	log.Printf("Starting deploy agent at [%s]", config.Address)
 
 	http.HandleFunc("/update", update)
-	err := http.ListenAndServe(config.Address, nil)
+	err = http.ListenAndServe(config.Address, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
