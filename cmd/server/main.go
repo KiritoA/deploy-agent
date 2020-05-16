@@ -137,6 +137,7 @@ func update(writer http.ResponseWriter, request *http.Request) {
 		logger.Error("Failed to update service: ", err)
 		writer.WriteHeader(http.StatusInternalServerError)
 		writer.Write([]byte(fmt.Sprintf("Failed to update service: %v", err)))
+		return
 	}
 
 	if len(updateResp.Warnings) > 0 {
