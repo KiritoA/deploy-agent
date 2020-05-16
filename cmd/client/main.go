@@ -2,35 +2,43 @@ package main
 
 import (
 	"flag"
-	log "github.com/sirupsen/logrus"
+	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 )
+
+func exitWithMessage(message string) {
+	fmt.Print(message)
+	os.Exit(1)
+}
 
 func main() {
 	_url := flag.String("url", "", "Endpoint url")
 	service := flag.String("service", "", "Service name")
 	token := flag.String("token", "", "Token")
+	registryAuth := flag.String("registry-auth", "", "A base64-encoded auth configuration for pulling from private registries.")
 	image := flag.String("image", "", "Image name")
 	tag := flag.String("tag", "", "Image tag")
 	flag.Parse()
 
 	if *_url == "" {
-		log.Fatal("Endpoint url required")
+		exitWithMessage("Endpoint url required")
 	}
 
 	if *service == "" {
-		log.Fatal("Service required")
+		exitWithMessage("Service required")
 	}
 
 	if *image == "" {
-		log.Fatal("Image required")
+		exitWithMessage("Image required")
 	}
 
 	if *token == "" {
-		log.Fatal("Token required")
+		exitWithMessage("Token required")
 	}
 
 	client := &http.Client{}
@@ -47,6 +55,7 @@ func main() {
 	}
 
 	req.Header.Add("Authorization", "Bearer "+*token)
+	req.Header.Add("X-Registry-Auth", *registryAuth)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	resp, err := client.Do(req)
@@ -56,5 +65,5 @@ func main() {
 
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
-	log.Info(string(body))
+	fmt.Print(string(body))
 }

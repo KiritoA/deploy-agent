@@ -1,25 +1,28 @@
 package main
 
 import (
+	"context"
 	"crypto/subtle"
 	"flag"
 	"fmt"
+	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/swarm"
+	"github.com/docker/docker/client"
 	log "github.com/sirupsen/logrus"
 	"net/http"
 	"os"
-	"os/exec"
 	"regexp"
 )
 
 type Config struct {
-	Address     string
-	Registry    string
-	Token       string
+	Address  string
+	Registry string
+	Token    string
 }
 
 var config = Config{}
-
 var tokenRegex = regexp.MustCompile(`Bearer\s([a-zA-z0-9]+)`)
+var dockerClient *client.Client
 
 func init() {
 	// Output to stdout instead of the default stderr
@@ -28,9 +31,15 @@ func init() {
 
 	// Only log the warning severity or above.
 	log.SetLevel(log.DebugLevel)
+
+	var err error
+	dockerClient, err = client.NewEnvClient()
+	if err != nil {
+		log.Fatalf("Failed to initialize docker client: %v", err)
+	}
 }
 
-func loadConfig() {
+func main() {
 	address := flag.String("address", ":8090", "Server listen address")
 	registry := flag.String("registry", "", "Trusted registry")
 	token := flag.String("token", "", "Authorization token")
@@ -49,16 +58,12 @@ func loadConfig() {
 	}
 
 	config = Config{
-		Address:     *address,
-		Registry:    *registry,
-		Token:       *token,
+		Address:  *address,
+		Registry: *registry,
+		Token:    *token,
 	}
-}
 
-func main() {
-	loadConfig()
-
-	log.Println("Starting deploy agent")
+	log.Printf("Starting deploy agent at [%s]", config.Address)
 
 	http.HandleFunc("/update", update)
 	err := http.ListenAndServe(config.Address, nil)
@@ -84,14 +89,14 @@ func update(writer http.ResponseWriter, request *http.Request) {
 	serviceName := request.FormValue("service")
 	if serviceName == "" {
 		writer.WriteHeader(http.StatusBadRequest)
-		_, _ = writer.Write([]byte("missing parameter [service]"))
+		writer.Write([]byte("missing parameter [service]"))
 		return
 	}
 
 	image := request.FormValue("image")
 	if image == "" {
 		writer.WriteHeader(http.StatusBadRequest)
-		_, _ = writer.Write([]byte("missing parameter [image]"))
+		writer.Write([]byte("missing parameter [image]"))
 		return
 	}
 
@@ -102,23 +107,40 @@ func update(writer http.ResponseWriter, request *http.Request) {
 		imageName += ":" + tag
 	}
 
-	// docker service update --image [Service image tag] --with-registry-auth [Service name]
-	cmd := exec.Command("docker", "service", "update",
-		"--image", imageName,
-		"--with-registry-auth",
-		serviceName)
-	out, err := cmd.CombinedOutput()
-	outputStr := string(out)
-	if err != nil {
-		errStr := fmt.Sprintf("Docker command execution failed: \n%v\n%v", outputStr, err)
-		log.Error(errStr)
+	logger := log.WithField("service", serviceName).WithField("image", imageName)
 
-		writer.WriteHeader(http.StatusInternalServerError)
-		_, _ = writer.Write([]byte(fmt.Sprintf("Deploy failed: \n%v%v", outputStr, err)))
+	service, _, err := dockerClient.ServiceInspectWithRaw(context.Background(), serviceName)
+	if err != nil {
+		if client.IsErrServiceNotFound(err) {
+			writer.WriteHeader(http.StatusBadRequest)
+			writer.Write([]byte(fmt.Sprintf("Invalid service [%v]", serviceName)))
+		} else {
+			logger.Error("Failed to inspect service: ", err)
+			writer.WriteHeader(http.StatusInternalServerError)
+			writer.Write([]byte(fmt.Sprintf("Failed to inspect service: %v", err)))
+		}
 		return
 	}
 
-	_, _ = writer.Write(out)
+	serviceSpec := swarm.ServiceSpec{}
+	serviceSpec.Name = serviceName
+	serviceSpec.TaskTemplate.ContainerSpec.Image = imageName
 
-	log.WithField("service", serviceName).WithField("image", imageName).Info("Deploy completed")
+	updateResp, err := dockerClient.ServiceUpdate(context.Background(), serviceName, service.Version, serviceSpec,
+		types.ServiceUpdateOptions{EncodedRegistryAuth: request.Header.Get("X-Registry-Auth")})
+	if err != nil {
+		logger.Error("Failed to update service: ", err)
+		writer.WriteHeader(http.StatusInternalServerError)
+		writer.Write([]byte(fmt.Sprintf("Failed to update service: %v", err)))
+	}
+
+	if len(updateResp.Warnings) > 0 {
+		writer.Write([]byte("Warnings:\n"))
+
+		for _, warn := range updateResp.Warnings {
+			writer.Write([]byte(warn))
+		}
+	}
+
+	logger.Info("Update completed")
 }
