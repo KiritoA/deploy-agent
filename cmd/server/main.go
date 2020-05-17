@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/swarm"
 	"github.com/docker/docker/client"
 	log "github.com/sirupsen/logrus"
 	"net/http"
@@ -128,11 +127,10 @@ func update(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 
-	serviceSpec := swarm.ServiceSpec{}
-	serviceSpec.Name = serviceName
+	serviceSpec := &service.Spec
 	serviceSpec.TaskTemplate.ContainerSpec.Image = imageName
 
-	updateResp, err := dockerClient.ServiceUpdate(context.Background(), serviceName, service.Version, serviceSpec,
+	updateResp, err := dockerClient.ServiceUpdate(context.Background(), serviceName, service.Version, *serviceSpec,
 		types.ServiceUpdateOptions{EncodedRegistryAuth: request.Header.Get("X-Registry-Auth")})
 	if err != nil {
 		logger.Error("Failed to update service: ", err)
