@@ -1,11 +1,8 @@
 package main
 
 import (
-	"encoding/base64"
-	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/docker/docker/api/types"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -45,32 +42,22 @@ func main() {
 		exitWithMessage("Token required")
 	}
 
-	authConfig := types.AuthConfig{
-		Username: *username,
-		Password: *password,
-	}
-
-	encodedAuthConfig := ""
-	if (types.AuthConfig{} != authConfig) {
-		authBytes, _ := json.Marshal(authConfig)
-		encodedAuthConfig = base64.URLEncoding.EncodeToString(authBytes)
-	}
-
 	client := &http.Client{}
 
 	req, err := http.NewRequest("POST",
 		*_url+"/update",
 		strings.NewReader(url.Values{
-			"service": {*service},
-			"image":   {*image},
-			"tag":     {*tag},
+			"service":  {*service},
+			"image":    {*image},
+			"tag":      {*tag},
+			"username": {*username},
+			"password": {*password},
 		}.Encode()))
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	req.Header.Add("Authorization", "Bearer "+*token)
-	req.Header.Add("X-Registry-Auth", encodedAuthConfig)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	resp, err := client.Do(req)
