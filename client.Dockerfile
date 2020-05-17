@@ -1,5 +1,13 @@
 FROM debian:buster-slim
 
+RUN apt-get update && \ 
+    apt-get install -y \
+    apt-transport-https \
+    ca-certificates \
+    curl \
+    gnupg-agent \
+    software-properties-common
+
 ADD ./build/deploy-agent-client /usr/local/bin
 ADD ./build/deploy-agent-login /usr/local/bin
 
