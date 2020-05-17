@@ -9,6 +9,3 @@ build-server:
 
 build-client:
 	GOOS=linux GOARCH=amd64 go build -o build/$(FILE_NAME_PREXIF)-client ./cmd/client
-
-build-login:
-	GOOS=linux GOARCH=amd64 go build -o build/$(FILE_NAME_PREXIF)-login ./cmd/login
