@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"crypto/subtle"
+	"encoding/base64"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"github.com/docker/docker/api/types"
@@ -130,8 +132,17 @@ func update(writer http.ResponseWriter, request *http.Request) {
 	serviceSpec := &service.Spec
 	serviceSpec.TaskTemplate.ContainerSpec.Image = imageName
 
+	authConfig := types.AuthConfig{
+		ServerAddress: config.Registry,
+		Username:      request.FormValue("username"),
+		Password:      request.FormValue("password"),
+	}
+
+	authBytes, _ := json.Marshal(authConfig)
+	encodedAuthConfig := base64.URLEncoding.EncodeToString(authBytes)
+
 	updateResp, err := dockerClient.ServiceUpdate(context.Background(), serviceName, service.Version, *serviceSpec,
-		types.ServiceUpdateOptions{RegistryAuthFrom: "previous-spec"})
+		types.ServiceUpdateOptions{EncodedRegistryAuth: encodedAuthConfig})
 	if err != nil {
 		logger.Error("Failed to update service: ", err)
 		writer.WriteHeader(http.StatusInternalServerError)
